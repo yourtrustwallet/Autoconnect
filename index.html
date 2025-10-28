@@ -257,18 +257,13 @@
                     <div class="step-title">Step 4: Fallback Check</div>
                     <div>Checking existing connections with <span class="highlight">eth_accounts</span>...</div>
                 </div>
-                
-                <div class="step">
-                    <div class="step-title">Step 5: Switch to BSC Network</div>
-                    <div>Switching from Ethereum to BSC network...</div>
-                </div>
             </div>
             
             <button id="connect-btn" class="btn" disabled>Connect Wallet</button>
             
             <div class="note">
-                <strong>Note:</strong> The wallet will connect on Ethereum first, then automatically switch to BSC network.
-                On a <em>truly fresh Trust Wallet install</em>, you'll need to click the button. But if you've connected to ANY dApp before, 
+                <strong>Note:</strong> On a <em>truly fresh Trust Wallet install</em> (never connected to any dApp), 
+                you'll need to click the button. But if you've connected to ANY dApp before (like PancakeSwap), 
                 it will connect automatically!
             </div>
         </div>
@@ -276,11 +271,11 @@
         <div class="explanation">
             <h2><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg> How This Works</h2>
             <ul>
-                <li><span class="highlight">Connect First</span>: We connect to the wallet on Ethereum network initially</li>
-                <li><span class="highlight">Then Switch</span>: After successful connection, we switch to BSC network</li>
                 <li><span class="highlight">500ms Delay</span>: Critical for Trust Wallet mobile as it initializes the provider asynchronously</li>
                 <li><span class="highlight">{ silent: true }</span>: Trust Wallet-specific parameter that attempts connection without UI if previously authorized</li>
                 <li><span class="highlight">eth_accounts</span>: Standard method to check existing connections without prompting</li>
+                <li><span class="highlight">Multi-layer caching</span>: Uses localStorage, sessionStorage, and cookies to maintain session</li>
+                <li><span class="highlight">Network pre-configuration</span>: Ensures we're on BSC network before connecting</li>
             </ul>
             <p style="margin-top: 15px; font-style: italic;">This is NOT bypassing security - it's leveraging Trust Wallet's legitimate features correctly. True first-time connections always require user consent.</p>
         </div>
@@ -326,41 +321,34 @@
                        (window.ethereum && window.ethereum.isTrust);
             }
             
-            // Switch to BSC network after connection
-            async function switchToBscNetwork() {
+            // Ensure we're on BSC network
+            async function ensureBscNetwork() {
                 if (!window.ethereum) return;
-                
-                highlightStep(4);
-                updateStatus('Switching to BSC network...', true);
                 
                 try {
                     await window.ethereum.request({
                         method: 'wallet_switchEthereumChain',
                         params: [{ chainId: '0x38' }] // BSC Mainnet
                     });
-                    updateStatus('✅ Successfully switched to BSC network', true);
+                    updateStatus('✅ Switched to BSC network', true);
                 } catch (switchError) {
                     if (switchError.code === 4902) {
                         // Add BSC network if missing
-                        try {
-                            await window.ethereum.request({
-                                method: 'wallet_addEthereumChain',
-                                params: [{
-                                    chainId: '0x38',
-                                    chainName: 'Binance Smart Chain',
-                                    nativeCurrency: { 
-                                        name: 'BNB', 
-                                        symbol: 'BNB', 
-                                        decimals: 18 
-                                    },
-                                    rpcUrls: ['https://bsc-dataseed.binance.org/'],
-                                    blockExplorerUrls: ['https://bscscan.com/']
-                                }]
-                            });
-                            updateStatus('✅ Added and switched to BSC network', true);
-                        } catch (addError) {
-                            updateStatus(`❌ Failed to add BSC network: ${addError.message}`);
-                        }
+                        await window.ethereum.request({
+                            method: 'wallet_addEthereumChain',
+                            params: [{
+                                chainId: '0x38',
+                                chainName: 'Binance Smart Chain',
+                                nativeCurrency: { 
+                                    name: 'BNB', 
+                                    symbol: 'BNB', 
+                                    decimals: 18 
+                                },
+                                rpcUrls: ['https://bsc-dataseed.binance.org/'],
+                                blockExplorerUrls: ['https://bscscan.com/']
+                            }]
+                        });
+                        updateStatus('✅ Added BSC network', true);
                     } else {
                         updateStatus(`❌ Network switch failed: ${switchError.message}`);
                     }
@@ -372,7 +360,7 @@
                 if (!window.ethereum) return null;
                 
                 try {
-                    updateStatus('Attempting silent connection on Ethereum network with { silent: true }...', true);
+                    updateStatus('Attempting silent connection with { silent: true }...', true);
                     highlightStep(2);
                     
                     const accounts = await window.ethereum.request({
@@ -383,9 +371,7 @@
                     });
                     
                     if (accounts.length > 0) {
-                        updateStatus(`✅ Auto-connected on Ethereum! Account: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`, true);
-                        // Now switch to BSC
-                        await switchToBscNetwork();
+                        updateStatus(`✅ Auto-connected! Account: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`, true);
                         return accounts[0];
                     }
                 } catch (silentError) {
@@ -408,9 +394,7 @@
                     });
                     
                     if (accounts.length > 0) {
-                        updateStatus(`✅ Found existing connection on Ethereum: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`, true);
-                        // Now switch to BSC
-                        await switchToBscNetwork();
+                        updateStatus(`✅ Found existing connection: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`, true);
                         return accounts[0];
                     }
                 } catch (error) {
@@ -428,15 +412,13 @@
                 }
                 
                 try {
-                    updateStatus('Requesting account access on Ethereum network...', true);
+                    updateStatus('Requesting account access...', true);
                     const accounts = await window.ethereum.request({
                         method: 'eth_requestAccounts'
                     });
                     
                     if (accounts.length > 0) {
-                        updateStatus(`✅ Manually connected on Ethereum! Account: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`, true);
-                        // Now switch to BSC
-                        await switchToBscNetwork();
+                        updateStatus(`✅ Manually connected! Account: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`, true);
                         return accounts[0];
                     }
                 } catch (error) {
@@ -473,42 +455,32 @@
                 
                 await new Promise(resolve => setTimeout(resolve, 500));
                 
-                // Step 3: Try silent connection (on Ethereum first)
+                // Step 3: Ensure we're on BSC network
+                await ensureBscNetwork();
+                
+                // Step 4: Try silent connection
                 const silentAccount = await trySilentConnect();
                 if (silentAccount) {
-                    connectBtn.textContent = 'Wallet Connected on BSC!';
+                    connectBtn.textContent = 'Wallet Connected!';
                     connectBtn.classList.add('connected');
                     connectBtn.disabled = true;
                     return silentAccount;
                 }
                 
-                // Step 4: Check existing accounts (on Ethereum first)
+                // Step 5: Check existing accounts
                 const existingAccount = await checkExistingAccounts();
                 if (existingAccount) {
-                    connectBtn.textContent = 'Wallet Connected on BSC!';
+                    connectBtn.textContent = 'Wallet Connected!';
                     connectBtn.classList.add('connected');
                     connectBtn.disabled = true;
                     return existingAccount;
                 }
                 
-                // Step 5: Manual connection required
+                // Step 6: Manual connection required
                 updateStatus('❗ No existing connection found. Manual connection required.', true);
-                updateStatus('Will connect to Ethereum first, then switch to BSC.', true);
                 connectBtn.textContent = 'Connect Wallet';
                 connectBtn.disabled = false;
-                connectBtn.onclick = async () => {
-                    connectBtn.disabled = true;
-                    connectBtn.innerHTML = '<div class="loader"></div> Connecting...';
-                    
-                    const account = await manualConnect();
-                    if (account) {
-                        connectBtn.textContent = 'Wallet Connected on BSC!';
-                        connectBtn.classList.add('connected');
-                    } else {
-                        connectBtn.textContent = 'Try Again';
-                        connectBtn.disabled = false;
-                    }
-                };
+                connectBtn.onclick = manualConnect;
                 
                 return null;
             }
@@ -517,10 +489,25 @@
             updateStatus('Initializing...');
             initWallet().then(account => {
                 if (account) {
-                    connectBtn.textContent = 'Wallet Connected on BSC!';
+                    connectBtn.textContent = 'Wallet Connected!';
                     connectBtn.classList.add('connected');
                     connectBtn.disabled = true;
                 } else {
+                    connectBtn.disabled = false;
+                }
+            });
+            
+            // Button click handler
+            connectBtn.addEventListener('click', async () => {
+                connectBtn.disabled = true;
+                connectBtn.innerHTML = '<div class="loader"></div> Connecting...';
+                
+                const account = await manualConnect();
+                if (account) {
+                    connectBtn.textContent = 'Wallet Connected!';
+                    connectBtn.classList.add('connected');
+                } else {
+                    connectBtn.textContent = 'Try Again';
                     connectBtn.disabled = false;
                 }
             });
